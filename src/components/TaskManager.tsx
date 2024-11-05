@@ -227,25 +227,19 @@ export default function TaskManager() {
 
   async function getNextTaskNumber(projectId: string): Promise<number> {
     try {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("task_id")
-        .eq("project_id", projectId)
-        .order("task_id", { ascending: false })
-        .limit(1);
+      const { data, error } = await supabase.rpc("get_next_task_number", {
+        p_project_id: projectId,
+      });
 
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        const lastTaskId = data[0].task_id;
-        const lastNumber = parseInt(lastTaskId.split("-")[1]);
-        return lastNumber + 1;
+      if (error) {
+        console.error("Error getting next task number:", error);
+        throw error;
       }
 
-      return 1;
+      return data;
     } catch (error) {
       console.error("Error getting next task number:", error);
-      return 1;
+      throw error;
     }
   }
 
