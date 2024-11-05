@@ -25,6 +25,8 @@ import {
   Flag,
   Folder,
   Trash2,
+  ExternalLink,
+  Link,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -110,6 +112,7 @@ export default function TaskManager() {
   const [newProject, setNewProject] = React.useState({
     name: "",
     key: "",
+    github_url: "",
   });
   const [agents, setAgents] = React.useState<Agent[]>([]);
   const [isNewAgentModalOpen, setIsNewAgentModalOpen] = React.useState(false);
@@ -493,11 +496,13 @@ export default function TaskManager() {
         return;
       }
 
-      const { data, error } = await supabase.from("projects").insert([
+      const { error } = await supabase.from("projects").insert([
         {
           user_id: session.user.id,
           name: newProject.name,
           key: newProject.key.toUpperCase(),
+          github_url: newProject.github_url || null,
+          archived: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -506,7 +511,7 @@ export default function TaskManager() {
       if (error) throw error;
 
       fetchProjects();
-      setNewProject({ name: "", key: "" });
+      setNewProject({ name: "", key: "", github_url: "" });
       setIsNewProjectModalOpen(false);
     } catch (error) {
       console.error("Error creating project:", error);
@@ -517,24 +522,14 @@ export default function TaskManager() {
     if (!editingProject) return;
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.user) {
-        router.push("/auth");
-        return;
-      }
-
       const { error } = await supabase
         .from("projects")
         .update({
           name: editingProject.name,
-          key: editingProject.key.toUpperCase(),
+          github_url: editingProject.github_url,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", editingProject.id)
-        .eq("user_id", session.user.id);
+        .eq("id", editingProject.id);
 
       if (error) throw error;
 
@@ -1004,6 +999,17 @@ export default function TaskManager() {
                           <p className="text-sm text-muted-foreground">
                             Key: {project.key}
                           </p>
+                          {project.github_url && (
+                            <a
+                              href={project.github_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1 mt-1"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              GitHub Repo
+                            </a>
+                          )}
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -1476,6 +1482,20 @@ export default function TaskManager() {
                 maxLength={6}
               />
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="project-github">GitHub Repo URL (Optional)</Label>
+              <Input
+                id="project-github"
+                value={newProject.github_url}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    github_url: e.target.value,
+                  }))
+                }
+                placeholder="https://github.com/username/repo"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -1522,6 +1542,19 @@ export default function TaskManager() {
                 value={editingProject?.key ?? ""}
                 disabled
                 className="bg-muted"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-github">GitHub Repo URL</Label>
+              <Input
+                id="edit-project-github"
+                value={editingProject?.github_url ?? ""}
+                onChange={(e) =>
+                  setEditingProject((prev) =>
+                    prev ? { ...prev, github_url: e.target.value } : null
+                  )
+                }
+                placeholder="https://github.com/username/repo"
               />
             </div>
           </div>
@@ -1847,13 +1880,28 @@ export default function TaskManager() {
                   </div>
                   <div className="bg-muted/50 rounded-lg p-3">
                     <div className="text-xs text-muted-foreground mb-1">
-                      Team
+                      Code
                     </div>
                     <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-green-500" />
-                      <span className="text-sm">
-                        {selectedTask.team || "Unassigned"}
-                      </span>
+                      <Link className="h-4 w-4 text-blue-500" />
+                      {selectedTask.feature_branch ? (
+                        <a
+                          href={`${
+                            projects.find(
+                              (p) => p.id === selectedTask.project_id
+                            )?.github_url
+                          }/tree/${selectedTask.feature_branch}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-500 hover:text-blue-600"
+                        >
+                          Feature branch
+                        </a>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          No branch
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

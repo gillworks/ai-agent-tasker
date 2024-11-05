@@ -10,6 +10,7 @@ export type Task = {
   project: string;
   agent_id: string | null;
   team: string;
+  feature_branch: string | null;
   tags: string[];
   created_at: string;
   updated_at: string;
