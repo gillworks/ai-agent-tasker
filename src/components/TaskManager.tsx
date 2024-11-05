@@ -50,6 +50,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -76,6 +77,8 @@ export default function TaskManager() {
     tags: [] as string[],
   });
   const [newTagInput, setNewTagInput] = React.useState("");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [taskToDelete, setTaskToDelete] = React.useState<Task | null>(null);
 
   React.useEffect(() => {
     fetchTasks();
@@ -206,6 +209,42 @@ export default function TaskManager() {
       ...prev,
       tags: prev.tags.filter((tag) => tag !== tagToRemove),
     }));
+  }
+
+  async function handleDeleteTask(task: Task) {
+    setTaskToDelete(task);
+    setIsDeleteDialogOpen(true);
+  }
+
+  async function confirmDeleteTask() {
+    if (!taskToDelete) return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", taskToDelete.id)
+        .eq("user_id", session.user.id);
+
+      if (error) throw error;
+
+      // Refresh tasks list and close panels
+      fetchTasks();
+      setSelectedTask(null);
+      setIsDeleteDialogOpen(false);
+      setTaskToDelete(null);
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
   }
 
   return (
@@ -477,13 +516,15 @@ export default function TaskManager() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold">Task Details</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedTask(null)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSelectedTask(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div className="space-y-4">
                 <div>
@@ -535,6 +576,15 @@ export default function TaskManager() {
                     ))}
                   </div>
                 </div>
+              </div>
+              <div className="mt-8 pt-6 border-t">
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => handleDeleteTask(selectedTask)}
+                >
+                  Delete Task
+                </Button>
               </div>
             </div>
           </div>
@@ -631,6 +681,39 @@ export default function TaskManager() {
               Cancel
             </Button>
             <Button onClick={handleCreateTask}>Create Task</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this task? This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-6">
+            <div className="rounded-lg border bg-card p-4">
+              <h4 className="font-medium">{taskToDelete?.title}</h4>
+              <p className="text-sm text-muted-foreground mt-1">
+                {taskToDelete?.task_id}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setTaskToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteTask}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
