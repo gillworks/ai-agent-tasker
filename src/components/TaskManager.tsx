@@ -70,7 +70,7 @@ export default function TaskManager() {
   const [newTask, setNewTask] = React.useState({
     title: "",
     description: "",
-    status: "pending",
+    status: "draft",
     priority: "medium",
     project: "",
     agent: "",
@@ -181,7 +181,7 @@ export default function TaskManager() {
       setNewTask({
         title: "",
         description: "",
-        status: "pending",
+        status: "draft",
         priority: "medium",
         project: "",
         agent: "",
@@ -271,24 +271,53 @@ export default function TaskManager() {
         return;
       }
 
-      const { error } = await supabase
+      // Log the data being sent to help debug
+      console.log("Updating task with data:", {
+        ...editingTask,
+        updated_at: new Date().toISOString(),
+      });
+
+      const { data, error } = await supabase
         .from("tasks")
         .update({
-          ...editingTask,
+          title: editingTask.title,
+          description: editingTask.description,
+          status: editingTask.status,
+          priority: editingTask.priority,
+          project: editingTask.project,
+          agent: editingTask.agent,
+          team: editingTask.team,
+          tags: editingTask.tags,
           updated_at: new Date().toISOString(),
         })
         .eq("id", editingTask.id)
-        .eq("user_id", session.user.id);
+        .eq("user_id", session.user.id)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error details:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        throw error;
+      }
 
       // Refresh tasks list and update selected task
       fetchTasks();
       setSelectedTask(editingTask);
       setIsEditTaskModalOpen(false);
       setEditingTask(null);
-    } catch (error) {
-      console.error("Error updating task:", error);
+    } catch (error: any) {
+      // More detailed error logging
+      if (error?.message) {
+        console.error("Error updating task:", error.message);
+      } else {
+        console.error("Error updating task:", error);
+      }
+      // Optionally show error to user
+      alert("Failed to update task. Please try again.");
     }
   }
 
@@ -457,6 +486,7 @@ export default function TaskManager() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="in-progress">In Progress</SelectItem>
                     <SelectItem value="complete">Complete</SelectItem>
@@ -510,6 +540,8 @@ export default function TaskManager() {
                               ? "border-green-500 text-green-500"
                               : task.status === "in-progress"
                               ? "border-yellow-500 text-yellow-500"
+                              : task.status === "draft"
+                              ? "border-purple-500 text-purple-500"
                               : "border-gray-500 text-gray-500"
                           }
                         `}
@@ -549,6 +581,8 @@ export default function TaskManager() {
                                           ? "border-green-500 text-green-500"
                                           : task.status === "in-progress"
                                           ? "border-yellow-500 text-yellow-500"
+                                          : task.status === "draft"
+                                          ? "border-purple-500 text-purple-500"
                                           : "border-gray-500 text-gray-500"
                                       }
                                     `}
@@ -844,6 +878,7 @@ export default function TaskManager() {
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="complete">Complete</SelectItem>

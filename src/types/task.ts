@@ -4,7 +4,7 @@ export type Task = {
   user_id: string;
   title: string;
   description: string;
-  status: "pending" | "in-progress" | "complete";
+  status: "draft" | "pending" | "in-progress" | "complete";
   priority: "low" | "medium" | "high";
   project: string;
   agent: string;

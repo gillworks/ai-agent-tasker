@@ -37,6 +37,7 @@
     --status-pending: 39 100% 50%;
     --status-in-progress: 201 96% 32%;
     --status-complete: 142 76% 36%;
+    --status-draft: 270 70% 60%;
 
     --tag-bg: 221.2 83.2% 53.3%;
     --tag-color: 210 40% 98%;
@@ -74,6 +75,7 @@
     --status-pending: 39 100% 50%;
     --status-in-progress: 201 96% 32%;
     --status-complete: 142 76% 36%;
+    --status-draft: 270 70% 60%;
 
     --tag-bg: 217.2 91.2% 59.8%;
     --tag-color: 222.2 47.4% 11.2%;
