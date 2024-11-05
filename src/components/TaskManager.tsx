@@ -20,6 +20,11 @@ import {
   Users,
   X,
   Pencil,
+  AlignLeft,
+  Info,
+  Flag,
+  Folder,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1343,7 +1348,7 @@ export default function TaskManager() {
       {selectedTask && (
         <div className="w-96 border-l overflow-auto">
           <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold">Task Details</h2>
               <div className="flex gap-2">
                 <Button
@@ -1362,54 +1367,120 @@ export default function TaskManager() {
                 </Button>
               </div>
             </div>
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-medium">{selectedTask.title}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {selectedTask.task_id}
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Description</h4>
-                <p className="text-sm">{selectedTask.description}</p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Details</h4>
-                <ul className="text-sm space-y-1">
-                  <li>
-                    <span className="font-medium">Status:</span>{" "}
+            <div className="space-y-6">
+              <div className="bg-accent/50 rounded-lg p-4">
+                <h3 className="font-medium text-lg">{selectedTask.title}</h3>
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge variant="outline">{selectedTask.task_id}</Badge>
+                  <Badge
+                    variant="outline"
+                    className={`
+                      ${
+                        selectedTask.status === "complete"
+                          ? "border-green-500 text-green-500"
+                          : selectedTask.status === "in-progress"
+                          ? "border-yellow-500 text-yellow-500"
+                          : selectedTask.status === "draft"
+                          ? "border-purple-500 text-purple-500"
+                          : "border-gray-500 text-gray-500"
+                      }
+                    `}
+                  >
                     {selectedTask.status}
-                  </li>
-                  <li>
-                    <span className="font-medium">Priority:</span>{" "}
-                    {selectedTask.priority}
-                  </li>
-                  <li>
-                    <span className="font-medium">Project:</span>{" "}
-                    {selectedTask.project}
-                  </li>
-                  <li>
-                    <span className="font-medium">Agent:</span>{" "}
-                    {selectedTask.agent}
-                  </li>
-                  <li>
-                    <span className="font-medium">Team:</span>{" "}
-                    {selectedTask.team}
-                  </li>
-                </ul>
+                  </Badge>
+                </div>
               </div>
+
               <div>
-                <h4 className="font-medium mb-2">Tags</h4>
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <AlignLeft className="h-4 w-4 text-muted-foreground" />
+                  Description
+                </h4>
+                <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                  {selectedTask.description || "No description provided"}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <Info className="h-4 w-4 text-muted-foreground" />
+                  Details
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Priority
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Flag
+                        className={`h-4 w-4 ${
+                          selectedTask.priority === "high"
+                            ? "text-red-500"
+                            : selectedTask.priority === "medium"
+                            ? "text-yellow-500"
+                            : "text-blue-500"
+                        }`}
+                      />
+                      <span className="text-sm capitalize">
+                        {selectedTask.priority}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Project
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Folder className="h-4 w-4 text-orange-500" />
+                      <span className="text-sm">{selectedTask.project}</span>
+                    </div>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Agent
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Bot className="h-4 w-4 text-purple-500" />
+                      <span className="text-sm">
+                        {selectedTask.agent || "Unassigned"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Team
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">
+                        {selectedTask.team || "Unassigned"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <Tags className="h-4 w-4 text-muted-foreground" />
+                  Tags
+                </h4>
                 <div className="flex flex-wrap gap-2">
-                  {selectedTask.tags.map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="bg-blue-500/10 text-blue-500"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
+                  {selectedTask.tags.length > 0 ? (
+                    selectedTask.tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="bg-blue-500/10 text-blue-500"
+                      >
+                        {tag}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      No tags
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1419,6 +1490,7 @@ export default function TaskManager() {
                 className="w-full"
                 onClick={() => handleDeleteTask(selectedTask)}
               >
+                <Trash2 className="h-4 w-4 mr-2" />
                 Delete Task
               </Button>
             </div>
