@@ -63,6 +63,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Project } from "@/types/project";
+import { Agent } from "@/types/agent";
 
 export default function TaskManager() {
   const router = useRouter();
@@ -79,9 +80,9 @@ export default function TaskManager() {
     description: "",
     status: "draft",
     priority: "medium",
-    project_id: "",
+    project_id: "none",
     project: "",
-    agent: "",
+    agent_id: "none",
     team: "",
     tags: [] as string[],
   });
@@ -91,7 +92,7 @@ export default function TaskManager() {
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = React.useState(false);
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
   const [selectedSection, setSelectedSection] = React.useState<
-    "tasks" | "projects"
+    "tasks" | "projects" | "agents"
   >("tasks");
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] =
@@ -110,10 +111,23 @@ export default function TaskManager() {
     name: "",
     key: "",
   });
+  const [agents, setAgents] = React.useState<Agent[]>([]);
+  const [isNewAgentModalOpen, setIsNewAgentModalOpen] = React.useState(false);
+  const [isEditAgentModalOpen, setIsEditAgentModalOpen] = React.useState(false);
+  const [isDeleteAgentDialogOpen, setIsDeleteAgentDialogOpen] =
+    React.useState(false);
+  const [agentToDelete, setAgentToDelete] = React.useState<Agent | null>(null);
+  const [editingAgent, setEditingAgent] = React.useState<Agent | null>(null);
+  const [newAgent, setNewAgent] = React.useState({
+    name: "",
+    url: "",
+    description: "",
+  });
 
   React.useEffect(() => {
     fetchTasks();
     fetchProjects();
+    fetchAgents();
   }, []);
 
   React.useEffect(() => {
@@ -133,6 +147,12 @@ export default function TaskManager() {
       fetchProjects();
     }
   }, [isEditTaskModalOpen]);
+
+  React.useEffect(() => {
+    if (isNewTaskModalOpen || isEditTaskModalOpen) {
+      fetchAgents();
+    }
+  }, [isNewTaskModalOpen, isEditTaskModalOpen]);
 
   async function fetchTasks() {
     try {
@@ -196,6 +216,38 @@ export default function TaskManager() {
       }
     } catch (error) {
       console.error("Error fetching projects:", error);
+    }
+  }
+
+  async function fetchAgents() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        console.log("No active session");
+        router.push("/auth");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("agents")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .eq("archived", false)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
+
+      if (data) {
+        setAgents(data);
+      }
+    } catch (error) {
+      console.error("Error fetching agents:", error);
     }
   }
 
@@ -273,7 +325,7 @@ export default function TaskManager() {
           priority: newTask.priority,
           project_id: project.id,
           project: project.name,
-          agent: newTask.agent,
+          agent_id: newTask.agent_id || null,
           team: newTask.team,
           tags: newTask.tags,
           created_at: new Date().toISOString(),
@@ -289,9 +341,9 @@ export default function TaskManager() {
         description: "",
         status: "draft",
         priority: "medium",
-        project_id: "",
+        project_id: "none",
         project: "",
-        agent: "",
+        agent_id: "none",
         team: "",
         tags: [],
       });
@@ -378,53 +430,34 @@ export default function TaskManager() {
         return;
       }
 
-      // Log the data being sent to help debug
-      console.log("Updating task with data:", {
-        ...editingTask,
-        updated_at: new Date().toISOString(),
-      });
-
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("tasks")
         .update({
           title: editingTask.title,
           description: editingTask.description,
           status: editingTask.status,
           priority: editingTask.priority,
+          project_id: editingTask.project_id,
           project: editingTask.project,
-          agent: editingTask.agent,
+          agent_id: editingTask.agent_id,
           team: editingTask.team,
           tags: editingTask.tags,
           updated_at: new Date().toISOString(),
         })
         .eq("id", editingTask.id)
-        .eq("user_id", session.user.id)
-        .select();
+        .eq("user_id", session.user.id);
 
-      if (error) {
-        console.error("Supabase error details:", {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-        });
-        throw error;
-      }
+      if (error) throw error;
 
-      // Refresh tasks list and update selected task
       fetchTasks();
-      setSelectedTask(editingTask);
       setIsEditTaskModalOpen(false);
       setEditingTask(null);
-    } catch (error: any) {
-      // More detailed error logging
-      if (error?.message) {
-        console.error("Error updating task:", error.message);
-      } else {
-        console.error("Error updating task:", error);
+      if (selectedTask?.id === editingTask.id) {
+        const updatedTask = { ...selectedTask, ...editingTask };
+        setSelectedTask(updatedTask);
       }
-      // Optionally show error to user
-      alert("Failed to update task. Please try again.");
+    } catch (error) {
+      console.error("Error updating task:", error);
     }
   }
 
@@ -542,9 +575,109 @@ export default function TaskManager() {
     }
   }
 
-  function handleSidebarItemClick(section: "tasks" | "projects") {
+  function handleSidebarItemClick(section: "tasks" | "projects" | "agents") {
     setSelectedSection(section);
   }
+
+  async function handleCreateAgent() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { error } = await supabase.from("agents").insert([
+        {
+          user_id: session.user.id,
+          name: newAgent.name,
+          url: newAgent.url,
+          description: newAgent.description || null,
+          archived: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) throw error;
+
+      fetchAgents();
+      setNewAgent({ name: "", url: "", description: "" });
+      setIsNewAgentModalOpen(false);
+    } catch (error) {
+      console.error("Error creating agent:", error);
+    }
+  }
+
+  async function handleUpdateAgent() {
+    if (!editingAgent) return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("agents")
+        .update({
+          name: editingAgent.name,
+          url: editingAgent.url,
+          description: editingAgent.description,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingAgent.id)
+        .eq("user_id", session.user.id);
+
+      if (error) throw error;
+
+      fetchAgents();
+      setIsEditAgentModalOpen(false);
+      setEditingAgent(null);
+    } catch (error) {
+      console.error("Error updating agent:", error);
+    }
+  }
+
+  async function handleArchiveAgent() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("agents")
+        .update({ archived: true, updated_at: new Date().toISOString() })
+        .eq("id", agentToDelete?.id)
+        .eq("user_id", session.user.id);
+
+      if (error) throw error;
+
+      fetchAgents();
+      setIsDeleteAgentDialogOpen(false);
+      setAgentToDelete(null);
+    } catch (error) {
+      console.error("Error archiving agent:", error);
+    }
+  }
+
+  const getAgentName = (agentId: string | null) => {
+    if (!agentId) return "Unassigned";
+    const agent = agents.find((a) => a.id === agentId);
+    return agent ? agent.name : "Unassigned";
+  };
 
   return (
     <SidebarProvider>
@@ -586,7 +719,12 @@ export default function TaskManager() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton className="w-full hover:bg-accent/50">
+                    <SidebarMenuButton
+                      className={`w-full hover:bg-accent/50 ${
+                        selectedSection === "agents" ? "bg-accent/50" : ""
+                      }`}
+                      onClick={() => handleSidebarItemClick("agents")}
+                    >
                       <Bot className="h-4 w-4 text-purple-500" />
                       <span>Agents</span>
                     </SidebarMenuButton>
@@ -840,7 +978,7 @@ export default function TaskManager() {
                 </div>
               </div>
             </>
-          ) : (
+          ) : selectedSection === "projects" ? (
             <>
               <header className="flex items-center justify-between border-b px-6 py-3">
                 <div className="flex items-center gap-2">
@@ -895,7 +1033,67 @@ export default function TaskManager() {
                 </div>
               </div>
             </>
-          )}
+          ) : selectedSection === "agents" ? (
+            <>
+              <header className="flex items-center justify-between border-b px-6 py-3">
+                <div className="flex items-center gap-2">
+                  <SidebarTrigger />
+                  <h1 className="text-xl font-semibold pr-40">Agents</h1>
+                </div>
+                <Button onClick={() => setIsNewAgentModalOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Agent
+                </Button>
+              </header>
+
+              <div className="flex-grow overflow-auto">
+                <div className="p-6">
+                  <div className="space-y-4">
+                    {agents.map((agent) => (
+                      <div
+                        key={agent.id}
+                        className="flex items-center justify-between rounded-lg border bg-card p-4"
+                      >
+                        <div>
+                          <h3 className="font-medium">{agent.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {agent.url}
+                          </p>
+                          {agent.description && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {agent.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => {
+                              setEditingAgent(agent);
+                              setIsEditAgentModalOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => {
+                              setAgentToDelete(agent);
+                              setIsDeleteAgentDialogOpen(true);
+                            }}
+                          >
+                            <Archive className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -963,9 +1161,31 @@ export default function TaskManager() {
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Select a project</SelectItem>
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
-                      {project.name} ({project.key})
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="agent">Agent</Label>
+              <Select
+                value={newTask.agent_id}
+                onValueChange={(value) =>
+                  setNewTask((prev) => ({ ...prev, agent_id: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1124,7 +1344,7 @@ export default function TaskManager() {
             <div className="grid gap-2">
               <Label htmlFor="edit-project">Project</Label>
               <Select
-                value={editingTask?.project_id}
+                value={editingTask?.project_id || "none"}
                 onValueChange={(value) => {
                   const project = projects.find((p) => p.id === value);
                   setEditingTask((prev) =>
@@ -1142,9 +1362,33 @@ export default function TaskManager() {
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Select a project</SelectItem>
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
-                      {project.name} ({project.key})
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-agent">Agent</Label>
+              <Select
+                value={editingTask?.agent_id || "none"}
+                onValueChange={(value) =>
+                  setEditingTask((prev) =>
+                    prev ? { ...prev, agent_id: value } : null
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1339,6 +1583,167 @@ export default function TaskManager() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isNewAgentModalOpen} onOpenChange={setIsNewAgentModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Create New Agent</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="agent-name">Agent Name</Label>
+              <Input
+                id="agent-name"
+                value={newAgent.name}
+                onChange={(e) =>
+                  setNewAgent((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="agent-url">URL</Label>
+              <Input
+                id="agent-url"
+                value={newAgent.url}
+                onChange={(e) =>
+                  setNewAgent((prev) => ({ ...prev, url: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="agent-description">Description (Optional)</Label>
+              <Textarea
+                id="agent-description"
+                value={newAgent.description}
+                onChange={(e) =>
+                  setNewAgent((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsNewAgentModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateAgent}
+              disabled={!newAgent.name || !newAgent.url}
+            >
+              Create Agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditAgentModalOpen}
+        onOpenChange={setIsEditAgentModalOpen}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Agent</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-agent-name">Agent Name</Label>
+              <Input
+                id="edit-agent-name"
+                value={editingAgent?.name ?? ""}
+                onChange={(e) =>
+                  setEditingAgent((prev) =>
+                    prev ? { ...prev, name: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-agent-url">URL</Label>
+              <Input
+                id="edit-agent-url"
+                value={editingAgent?.url ?? ""}
+                onChange={(e) =>
+                  setEditingAgent((prev) =>
+                    prev ? { ...prev, url: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-agent-description">Description</Label>
+              <Textarea
+                id="edit-agent-description"
+                value={editingAgent?.description ?? ""}
+                onChange={(e) =>
+                  setEditingAgent((prev) =>
+                    prev ? { ...prev, description: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditAgentModalOpen(false);
+                setEditingAgent(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateAgent}
+              disabled={!editingAgent?.name || !editingAgent.url}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isDeleteAgentDialogOpen}
+        onOpenChange={setIsDeleteAgentDialogOpen}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Archive Agent</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to archive this agent? Archived agents will
+              no longer appear in task assignment, but existing task assignments
+              will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-6">
+            <div className="rounded-lg border bg-card p-4">
+              <h4 className="font-medium">{agentToDelete?.name}</h4>
+              <p className="text-sm text-muted-foreground mt-1">
+                {agentToDelete?.url}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteAgentDialogOpen(false);
+                setAgentToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleArchiveAgent}>
+              Archive Agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {selectedTask && (
         <div className="w-96 border-l overflow-auto">
           <div className="p-6">
@@ -1436,7 +1841,7 @@ export default function TaskManager() {
                     <div className="flex items-center gap-2">
                       <Bot className="h-4 w-4 text-purple-500" />
                       <span className="text-sm">
-                        {selectedTask.agent || "Unassigned"}
+                        {getAgentName(selectedTask.agent_id)}
                       </span>
                     </div>
                   </div>

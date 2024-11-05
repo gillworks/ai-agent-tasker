@@ -8,7 +8,7 @@ export type Task = {
   priority: "low" | "medium" | "high";
   project_id: string;
   project: string;
-  agent: string;
+  agent_id: string | null;
   team: string;
   tags: string[];
   created_at: string;
