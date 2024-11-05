@@ -134,7 +134,7 @@ export default function TaskManager() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>
+                    <SidebarMenuButton className="cursor-pointer">
                       <Inbox className="h-4 w-4 text-blue-500" />
                       <span>Tasks</span>
                     </SidebarMenuButton>
@@ -192,7 +192,11 @@ export default function TaskManager() {
               <h1 className="text-xl font-semibold pr-40">Tasks</h1>
             </div>
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 cursor-pointer"
+              >
                 <Bell className="h-4 w-4" />
               </Button>
               <Select value={selectedView} onValueChange={setSelectedView}>
