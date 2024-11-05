@@ -325,35 +325,37 @@ export default function TaskManager() {
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground">
+                Navigation
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton className="cursor-pointer">
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
                       <Inbox className="h-4 w-4 text-blue-500" />
-                      <span>Tasks</span>
+                      <span>Inbox</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
                       <Bot className="h-4 w-4 text-purple-500" />
                       <span>Agents</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
                       <Users className="h-4 w-4 text-green-500" />
                       <span>Teams</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
                       <Tags className="h-4 w-4 text-orange-500" />
                       <span>Projects</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
                       <Settings className="h-4 w-4 text-gray-500" />
                       <span>Settings</span>
                     </SidebarMenuButton>
@@ -362,17 +364,25 @@ export default function TaskManager() {
               </SidebarGroupContent>
             </SidebarGroup>
             <SidebarGroup>
-              <SidebarGroupLabel>Teams</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground">
+                Teams
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>NLP Team</SidebarMenuButton>
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
+                      NLP Team
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>Research Team</SidebarMenuButton>
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
+                      Research Team
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton>Support Team</SidebarMenuButton>
+                    <SidebarMenuButton className="w-full hover:bg-accent/50">
+                      Support Team
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
