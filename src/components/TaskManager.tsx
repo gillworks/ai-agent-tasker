@@ -56,6 +56,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Project } from "@/types/project";
 
 export default function TaskManager() {
   const router = useRouter();
@@ -82,10 +83,36 @@ export default function TaskManager() {
   const [taskToDelete, setTaskToDelete] = React.useState<Task | null>(null);
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = React.useState(false);
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
+  const [selectedSection, setSelectedSection] = React.useState<
+    "tasks" | "projects"
+  >("tasks");
+  const [projects, setProjects] = React.useState<Project[]>([]);
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] =
+    React.useState(false);
+  const [isEditProjectModalOpen, setIsEditProjectModalOpen] =
+    React.useState(false);
+  const [isDeleteProjectDialogOpen, setIsDeleteProjectDialogOpen] =
+    React.useState(false);
+  const [projectToDelete, setProjectToDelete] = React.useState<Project | null>(
+    null
+  );
+  const [editingProject, setEditingProject] = React.useState<Project | null>(
+    null
+  );
+  const [newProject, setNewProject] = React.useState({
+    name: "",
+    key: "",
+  });
 
   React.useEffect(() => {
     fetchTasks();
   }, []);
+
+  React.useEffect(() => {
+    if (selectedSection === "projects") {
+      fetchProjects();
+    }
+  }, [selectedSection]);
 
   async function fetchTasks() {
     try {
@@ -117,6 +144,33 @@ export default function TaskManager() {
       console.error("Error fetching tasks:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchProjects() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setProjects(data);
+      }
+    } catch (error) {
+      console.error("Error fetching projects:", error);
     }
   }
 
@@ -342,6 +396,103 @@ export default function TaskManager() {
     }));
   }
 
+  async function handleCreateProject() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { data, error } = await supabase.from("projects").insert([
+        {
+          user_id: session.user.id,
+          name: newProject.name,
+          key: newProject.key.toUpperCase(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) throw error;
+
+      fetchProjects();
+      setNewProject({ name: "", key: "" });
+      setIsNewProjectModalOpen(false);
+    } catch (error) {
+      console.error("Error creating project:", error);
+    }
+  }
+
+  async function handleUpdateProject() {
+    if (!editingProject) return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          name: editingProject.name,
+          key: editingProject.key.toUpperCase(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingProject.id)
+        .eq("user_id", session.user.id);
+
+      if (error) throw error;
+
+      fetchProjects();
+      setIsEditProjectModalOpen(false);
+      setEditingProject(null);
+    } catch (error) {
+      console.error("Error updating project:", error);
+    }
+  }
+
+  async function handleDeleteProject() {
+    if (!projectToDelete) return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", projectToDelete.id)
+        .eq("user_id", session.user.id);
+
+      if (error) throw error;
+
+      fetchProjects();
+      setIsDeleteProjectDialogOpen(false);
+      setProjectToDelete(null);
+    } catch (error) {
+      console.error("Error deleting project:", error);
+    }
+  }
+
+  function handleSidebarItemClick(section: "tasks" | "projects") {
+    setSelectedSection(section);
+  }
+
   return (
     <SidebarProvider>
       <div className="flex h-screen bg-background">
@@ -360,9 +511,25 @@ export default function TaskManager() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton className="w-full hover:bg-accent/50">
+                    <SidebarMenuButton
+                      className={`w-full hover:bg-accent/50 ${
+                        selectedSection === "tasks" ? "bg-accent/50" : ""
+                      }`}
+                      onClick={() => handleSidebarItemClick("tasks")}
+                    >
                       <Inbox className="h-4 w-4 text-blue-500" />
-                      <span>Inbox</span>
+                      <span>Tasks</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      className={`w-full hover:bg-accent/50 ${
+                        selectedSection === "projects" ? "bg-accent/50" : ""
+                      }`}
+                      onClick={() => handleSidebarItemClick("projects")}
+                    >
+                      <Tags className="h-4 w-4 text-orange-500" />
+                      <span>Projects</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -375,12 +542,6 @@ export default function TaskManager() {
                     <SidebarMenuButton className="w-full hover:bg-accent/50">
                       <Users className="h-4 w-4 text-green-500" />
                       <span>Teams</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton className="w-full hover:bg-accent/50">
-                      <Tags className="h-4 w-4 text-orange-500" />
-                      <span>Projects</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -420,293 +581,271 @@ export default function TaskManager() {
         </Sidebar>
 
         <div className="flex flex-col flex-grow overflow-hidden">
-          <header className="flex items-center justify-between border-b px-6 py-3">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger />
-              <h1 className="text-xl font-semibold pr-40">Tasks</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 cursor-pointer"
-              >
-                <Bell className="h-4 w-4" />
-              </Button>
-              <Select value={selectedView} onValueChange={setSelectedView}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="list">
-                    <div className="flex items-center">
-                      <List className="mr-2 h-4 w-4" />
-                      List
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="board">
-                    <div className="flex items-center">
-                      <LayoutGrid className="mr-2 h-4 w-4" />
-                      Board
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsDarkMode(!isDarkMode)}
-              >
-                {isDarkMode ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4" />
-                )}
-              </Button>
-              <Button onClick={() => setIsNewTaskModalOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Task
-              </Button>
-            </div>
-          </header>
-
-          <div className="flex-grow overflow-auto">
-            <div className="px-6 py-4">
-              <div className="flex gap-4 mb-4">
-                <Command className="flex-grow">
-                  <CommandInput
-                    placeholder="Search tasks..."
-                    value={searchQuery}
-                    onValueChange={setSearchQuery}
-                  />
-                </Command>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="in-progress">In Progress</SelectItem>
-                    <SelectItem value="complete">Complete</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedView === "list" ? (
-                <div className="space-y-4 max-w-[1200px]">
-                  {filteredTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-center justify-between rounded-lg border bg-card px-6 py-5 hover:bg-accent/50 cursor-pointer"
-                      onClick={() => setSelectedTask(task)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <Clock
-                          className={`h-4 w-4 ${
-                            task.status === "in-progress"
-                              ? "text-yellow-500"
-                              : task.status === "complete"
-                              ? "text-green-500"
-                              : "text-gray-500"
-                          }`}
-                        />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-muted-foreground">
-                              {task.task_id}
-                            </span>
-                            <h3 className="font-medium">{task.title}</h3>
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            {task.tags.map((tag) => (
-                              <Badge
-                                key={tag}
-                                variant="secondary"
-                                className="bg-blue-500/10 text-blue-500"
-                              >
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={`
-                          ${
-                            task.status === "complete"
-                              ? "border-green-500 text-green-500"
-                              : task.status === "in-progress"
-                              ? "border-yellow-500 text-yellow-500"
-                              : task.status === "draft"
-                              ? "border-purple-500 text-purple-500"
-                              : "border-gray-500 text-gray-500"
-                          }
-                        `}
-                      >
-                        {task.status}
-                      </Badge>
-                    </div>
-                  ))}
+          {selectedSection === "tasks" ? (
+            <>
+              <header className="flex items-center justify-between border-b px-6 py-3">
+                <div className="flex items-center gap-2">
+                  <SidebarTrigger />
+                  <h1 className="text-xl font-semibold pr-40">Tasks</h1>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {Object.keys(groupedTasks).length > 0 ? (
-                    Object.entries(groupedTasks).map(([status, tasks]) => (
-                      <Card key={status}>
-                        <CardHeader>
-                          <CardTitle>
-                            {status.charAt(0).toUpperCase() + status.slice(1)}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            {tasks.map((task) => (
-                              <div
-                                key={task.id}
-                                className="rounded-lg border bg-card p-4 hover:bg-accent/50 cursor-pointer"
-                                onClick={() => setSelectedTask(task)}
-                              >
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-sm font-medium text-muted-foreground">
-                                    {task.task_id}
-                                  </span>
-                                  <Badge
-                                    variant="outline"
-                                    className={`
-                                      ${
-                                        task.status === "complete"
-                                          ? "border-green-500 text-green-500"
-                                          : task.status === "in-progress"
-                                          ? "border-yellow-500 text-yellow-500"
-                                          : task.status === "draft"
-                                          ? "border-purple-500 text-purple-500"
-                                          : "border-gray-500 text-gray-500"
-                                      }
-                                    `}
-                                  >
-                                    {task.status}
-                                  </Badge>
-                                </div>
-                                <h3 className="font-medium mb-1">
-                                  {task.title}
-                                </h3>
-                                <div className="flex items-center gap-2">
-                                  {task.tags.map((tag) => (
-                                    <Badge
-                                      key={tag}
-                                      variant="secondary"
-                                      className="bg-blue-500/10 text-blue-500"
-                                    >
-                                      {tag}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  ) : (
-                    <div className="col-span-3 text-center text-muted-foreground">
-                      No tasks found matching the current filters.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {selectedTask && (
-          <div className="w-96 border-l overflow-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Task Details</h2>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleEditTask(selectedTask)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                <div className="flex items-center gap-4">
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setSelectedTask(null)}
+                    className="h-8 w-8 cursor-pointer"
                   >
-                    <X className="h-4 w-4" />
+                    <Bell className="h-4 w-4" />
+                  </Button>
+                  <Select value={selectedView} onValueChange={setSelectedView}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="list">
+                        <div className="flex items-center">
+                          <List className="mr-2 h-4 w-4" />
+                          List
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="board">
+                        <div className="flex items-center">
+                          <LayoutGrid className="mr-2 h-4 w-4" />
+                          Board
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsDarkMode(!isDarkMode)}
+                  >
+                    {isDarkMode ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button onClick={() => setIsNewTaskModalOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Task
                   </Button>
                 </div>
+              </header>
+
+              <div className="flex-grow overflow-auto">
+                <div className="px-6 py-4">
+                  <div className="flex gap-4 mb-4">
+                    <Command className="flex-grow">
+                      <CommandInput
+                        placeholder="Search tasks..."
+                        value={searchQuery}
+                        onValueChange={setSearchQuery}
+                      />
+                    </Command>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={setStatusFilter}
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Filter by status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="in-progress">In Progress</SelectItem>
+                        <SelectItem value="complete">Complete</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedView === "list" ? (
+                    <div className="space-y-4 max-w-[1200px]">
+                      {filteredTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between rounded-lg border bg-card px-6 py-5 hover:bg-accent/50 cursor-pointer"
+                          onClick={() => setSelectedTask(task)}
+                        >
+                          <div className="flex items-center gap-4">
+                            <Clock
+                              className={`h-4 w-4 ${
+                                task.status === "in-progress"
+                                  ? "text-yellow-500"
+                                  : task.status === "complete"
+                                  ? "text-green-500"
+                                  : "text-gray-500"
+                              }`}
+                            />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-muted-foreground">
+                                  {task.task_id}
+                                </span>
+                                <h3 className="font-medium">{task.title}</h3>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                {task.tags.map((tag) => (
+                                  <Badge
+                                    key={tag}
+                                    variant="secondary"
+                                    className="bg-blue-500/10 text-blue-500"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`
+                              ${
+                                task.status === "complete"
+                                  ? "border-green-500 text-green-500"
+                                  : task.status === "in-progress"
+                                  ? "border-yellow-500 text-yellow-500"
+                                  : task.status === "draft"
+                                  ? "border-purple-500 text-purple-500"
+                                  : "border-gray-500 text-gray-500"
+                              }
+                            `}
+                          >
+                            {task.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {Object.keys(groupedTasks).length > 0 ? (
+                        Object.entries(groupedTasks).map(([status, tasks]) => (
+                          <Card key={status}>
+                            <CardHeader>
+                              <CardTitle>
+                                {status.charAt(0).toUpperCase() +
+                                  status.slice(1)}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                {tasks.map((task) => (
+                                  <div
+                                    key={task.id}
+                                    className="rounded-lg border bg-card p-4 hover:bg-accent/50 cursor-pointer"
+                                    onClick={() => setSelectedTask(task)}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-medium text-muted-foreground">
+                                        {task.task_id}
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className={`
+                                          ${
+                                            task.status === "complete"
+                                              ? "border-green-500 text-green-500"
+                                              : task.status === "in-progress"
+                                              ? "border-yellow-500 text-yellow-500"
+                                              : task.status === "draft"
+                                              ? "border-purple-500 text-purple-500"
+                                              : "border-gray-500 text-gray-500"
+                                          }
+                                        `}
+                                      >
+                                        {task.status}
+                                      </Badge>
+                                    </div>
+                                    <h3 className="font-medium mb-1">
+                                      {task.title}
+                                    </h3>
+                                    <div className="flex items-center gap-2">
+                                      {task.tags.map((tag) => (
+                                        <Badge
+                                          key={tag}
+                                          variant="secondary"
+                                          className="bg-blue-500/10 text-blue-500"
+                                        >
+                                          {tag}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      ) : (
+                        <div className="col-span-3 text-center text-muted-foreground">
+                          No tasks found matching the current filters.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-medium">{selectedTask.title}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedTask.task_id}
-                  </p>
+            </>
+          ) : (
+            <>
+              <header className="flex items-center justify-between border-b px-6 py-3">
+                <div className="flex items-center gap-2">
+                  <SidebarTrigger />
+                  <h1 className="text-xl font-semibold pr-40">Projects</h1>
                 </div>
-                <div>
-                  <h4 className="font-medium mb-2">Description</h4>
-                  <p className="text-sm">{selectedTask.description}</p>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">Details</h4>
-                  <ul className="text-sm space-y-1">
-                    <li>
-                      <span className="font-medium">Status:</span>{" "}
-                      {selectedTask.status}
-                    </li>
-                    <li>
-                      <span className="font-medium">Priority:</span>{" "}
-                      {selectedTask.priority}
-                    </li>
-                    <li>
-                      <span className="font-medium">Project:</span>{" "}
-                      {selectedTask.project}
-                    </li>
-                    <li>
-                      <span className="font-medium">Agent:</span>{" "}
-                      {selectedTask.agent}
-                    </li>
-                    <li>
-                      <span className="font-medium">Team:</span>{" "}
-                      {selectedTask.team}
-                    </li>
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">Tags</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedTask.tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="bg-blue-500/10 text-blue-500"
+                <Button onClick={() => setIsNewProjectModalOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Project
+                </Button>
+              </header>
+
+              <div className="flex-grow overflow-auto">
+                <div className="p-6">
+                  <div className="space-y-4">
+                    {projects.map((project) => (
+                      <div
+                        key={project.id}
+                        className="flex items-center justify-between rounded-lg border bg-card p-4"
                       >
-                        {tag}
-                      </Badge>
+                        <div>
+                          <h3 className="font-medium">{project.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Key: {project.key}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => {
+                              setEditingProject(project);
+                              setIsEditProjectModalOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => {
+                              setProjectToDelete(project);
+                              setIsDeleteProjectDialogOpen(true);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
               </div>
-              <div className="mt-8 pt-6 border-t">
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => handleDeleteTask(selectedTask)}
-                >
-                  Delete Task
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
+
       <Dialog open={isNewTaskModalOpen} onOpenChange={setIsNewTaskModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -801,6 +940,7 @@ export default function TaskManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -834,6 +974,7 @@ export default function TaskManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={isEditTaskModalOpen} onOpenChange={setIsEditTaskModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -956,6 +1097,151 @@ export default function TaskManager() {
               Cancel
             </Button>
             <Button onClick={handleUpdateTask}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isNewProjectModalOpen}
+        onOpenChange={setIsNewProjectModalOpen}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="project-name">Project Name</Label>
+              <Input
+                id="project-name"
+                value={newProject.name}
+                onChange={(e) =>
+                  setNewProject((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="project-key">Project Key (2-6 characters)</Label>
+              <Input
+                id="project-key"
+                value={newProject.key}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    key: e.target.value.slice(0, 6),
+                  }))
+                }
+                maxLength={6}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsNewProjectModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateProject}
+              disabled={!newProject.name || newProject.key.length < 2}
+            >
+              Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditProjectModalOpen}
+        onOpenChange={setIsEditProjectModalOpen}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-name">Project Name</Label>
+              <Input
+                id="edit-project-name"
+                value={editingProject?.name ?? ""}
+                onChange={(e) =>
+                  setEditingProject((prev) =>
+                    prev ? { ...prev, name: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-key">
+                Project Key (2-6 characters)
+              </Label>
+              <Input
+                id="edit-project-key"
+                value={editingProject?.key ?? ""}
+                onChange={(e) =>
+                  setEditingProject((prev) =>
+                    prev ? { ...prev, key: e.target.value.slice(0, 6) } : null
+                  )
+                }
+                maxLength={6}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditProjectModalOpen(false);
+                setEditingProject(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateProject}
+              disabled={!editingProject?.name || editingProject.key.length < 2}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isDeleteProjectDialogOpen}
+        onOpenChange={setIsDeleteProjectDialogOpen}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this project? This action cannot
+              be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-6">
+            <div className="rounded-lg border bg-card p-4">
+              <h4 className="font-medium">{projectToDelete?.name}</h4>
+              <p className="text-sm text-muted-foreground mt-1">
+                Key: {projectToDelete?.key}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteProjectDialogOpen(false);
+                setProjectToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProject}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
