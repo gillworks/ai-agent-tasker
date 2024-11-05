@@ -6,6 +6,7 @@ export type Task = {
   description: string;
   status: "draft" | "pending" | "in-progress" | "complete";
   priority: "low" | "medium" | "high";
+  project_id: string;
   project: string;
   agent: string;
   team: string;

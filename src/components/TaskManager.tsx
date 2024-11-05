@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
+  Archive,
   Bell,
   Bot,
   Clock,
@@ -73,6 +74,7 @@ export default function TaskManager() {
     description: "",
     status: "draft",
     priority: "medium",
+    project_id: "",
     project: "",
     agent: "",
     team: "",
@@ -106,6 +108,7 @@ export default function TaskManager() {
 
   React.useEffect(() => {
     fetchTasks();
+    fetchProjects();
   }, []);
 
   React.useEffect(() => {
@@ -113,6 +116,18 @@ export default function TaskManager() {
       fetchProjects();
     }
   }, [selectedSection]);
+
+  React.useEffect(() => {
+    if (isNewTaskModalOpen) {
+      fetchProjects();
+    }
+  }, [isNewTaskModalOpen]);
+
+  React.useEffect(() => {
+    if (isEditTaskModalOpen) {
+      fetchProjects();
+    }
+  }, [isEditTaskModalOpen]);
 
   async function fetchTasks() {
     try {
@@ -154,6 +169,7 @@ export default function TaskManager() {
       } = await supabase.auth.getSession();
 
       if (!session?.user) {
+        console.log("No active session");
         router.push("/auth");
         return;
       }
@@ -162,9 +178,13 @@ export default function TaskManager() {
         .from("projects")
         .select("*")
         .eq("user_id", session.user.id)
+        .eq("archived", false)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
 
       if (data) {
         setProjects(data);
@@ -200,6 +220,30 @@ export default function TaskManager() {
     }, {} as Record<string, typeof tasks>);
   }, [filteredTasks]);
 
+  async function getNextTaskNumber(projectId: string): Promise<number> {
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("task_id")
+        .eq("project_id", projectId)
+        .order("task_id", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const lastTaskId = data[0].task_id;
+        const lastNumber = parseInt(lastTaskId.split("-")[1]);
+        return lastNumber + 1;
+      }
+
+      return 1;
+    } catch (error) {
+      console.error("Error getting next task number:", error);
+      return 1;
+    }
+  }
+
   async function handleCreateTask() {
     try {
       const {
@@ -211,16 +255,28 @@ export default function TaskManager() {
         return;
       }
 
-      const task_id = `TASK-${Math.random()
-        .toString(36)
-        .substr(2, 9)
-        .toUpperCase()}`;
+      const project = projects.find((p) => p.id === newTask.project_id);
+      if (!project) {
+        console.error("No project selected");
+        return;
+      }
 
-      const { data, error } = await supabase.from("tasks").insert([
+      const nextNumber = await getNextTaskNumber(project.id);
+      const taskId = `${project.key}-${String(nextNumber).padStart(3, "0")}`;
+
+      const { error } = await supabase.from("tasks").insert([
         {
-          task_id,
           user_id: session.user.id,
-          ...newTask,
+          task_id: taskId,
+          title: newTask.title,
+          description: newTask.description,
+          status: newTask.status,
+          priority: newTask.priority,
+          project_id: project.id,
+          project: project.name,
+          agent: newTask.agent,
+          team: newTask.team,
+          tags: newTask.tags,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -228,15 +284,13 @@ export default function TaskManager() {
 
       if (error) throw error;
 
-      // Refresh tasks list
       fetchTasks();
-
-      // Reset form and close modal
       setNewTask({
         title: "",
         description: "",
         status: "draft",
         priority: "medium",
+        project_id: "",
         project: "",
         agent: "",
         team: "",
@@ -460,7 +514,7 @@ export default function TaskManager() {
     }
   }
 
-  async function handleDeleteProject() {
+  async function handleArchiveProject() {
     if (!projectToDelete) return;
 
     try {
@@ -475,7 +529,7 @@ export default function TaskManager() {
 
       const { error } = await supabase
         .from("projects")
-        .delete()
+        .update({ archived: true, updated_at: new Date().toISOString() })
         .eq("id", projectToDelete.id)
         .eq("user_id", session.user.id);
 
@@ -485,7 +539,7 @@ export default function TaskManager() {
       setIsDeleteProjectDialogOpen(false);
       setProjectToDelete(null);
     } catch (error) {
-      console.error("Error deleting project:", error);
+      console.error("Error archiving project:", error);
     }
   }
 
@@ -833,7 +887,7 @@ export default function TaskManager() {
                               setIsDeleteProjectDialogOpen(true);
                             }}
                           >
-                            <X className="h-4 w-4" />
+                            <Archive className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -895,13 +949,28 @@ export default function TaskManager() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="project">Project</Label>
-              <Input
-                id="project"
-                value={newTask.project}
-                onChange={(e) =>
-                  setNewTask((prev) => ({ ...prev, project: e.target.value }))
-                }
-              />
+              <Select
+                value={newTask.project_id}
+                onValueChange={(value) => {
+                  const project = projects.find((p) => p.id === value);
+                  setNewTask((prev) => ({
+                    ...prev,
+                    project_id: value,
+                    project: project?.name || "",
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name} ({project.key})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="tags">Tags</Label>
@@ -936,7 +1005,12 @@ export default function TaskManager() {
             >
               Cancel
             </Button>
-            <Button onClick={handleCreateTask}>Create Task</Button>
+            <Button
+              onClick={handleCreateTask}
+              disabled={!newTask.title || !newTask.project_id}
+            >
+              Create Task
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1050,15 +1124,32 @@ export default function TaskManager() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-project">Project</Label>
-              <Input
-                id="edit-project"
-                value={editingTask?.project ?? ""}
-                onChange={(e) =>
+              <Select
+                value={editingTask?.project_id}
+                onValueChange={(value) => {
+                  const project = projects.find((p) => p.id === value);
                   setEditingTask((prev) =>
-                    prev ? { ...prev, project: e.target.value } : null
-                  )
-                }
-              />
+                    prev
+                      ? {
+                          ...prev,
+                          project_id: value,
+                          project: project?.name || "",
+                        }
+                      : null
+                  );
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name} ({project.key})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-tags">Tags</Label>
@@ -1115,9 +1206,17 @@ export default function TaskManager() {
               <Input
                 id="project-name"
                 value={newProject.name}
-                onChange={(e) =>
-                  setNewProject((prev) => ({ ...prev, name: e.target.value }))
-                }
+                onChange={(e) => {
+                  const name = e.target.value;
+                  // Auto-generate key from first 3 characters of name, uppercase
+                  const autoKey = name.slice(0, 3).toUpperCase();
+                  setNewProject((prev) => ({
+                    ...prev,
+                    name,
+                    // Only auto-update key if it hasn't been manually modified
+                    key: prev.key === "" ? autoKey : prev.key,
+                  }));
+                }}
               />
             </div>
             <div className="grid gap-2">
@@ -1128,7 +1227,7 @@ export default function TaskManager() {
                 onChange={(e) =>
                   setNewProject((prev) => ({
                     ...prev,
-                    key: e.target.value.slice(0, 6),
+                    key: e.target.value.slice(0, 6).toUpperCase(),
                   }))
                 }
                 maxLength={6}
@@ -1174,18 +1273,12 @@ export default function TaskManager() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="edit-project-key">
-                Project Key (2-6 characters)
-              </Label>
+              <Label htmlFor="edit-project-key">Project Key</Label>
               <Input
                 id="edit-project-key"
                 value={editingProject?.key ?? ""}
-                onChange={(e) =>
-                  setEditingProject((prev) =>
-                    prev ? { ...prev, key: e.target.value.slice(0, 6) } : null
-                  )
-                }
-                maxLength={6}
+                disabled
+                className="bg-muted"
               />
             </div>
           </div>
@@ -1215,10 +1308,11 @@ export default function TaskManager() {
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Delete Project</DialogTitle>
+            <DialogTitle>Archive Project</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this project? This action cannot
-              be undone.
+              Are you sure you want to archive this project? Archived projects
+              will no longer appear in task creation, but existing tasks will be
+              preserved.
             </DialogDescription>
           </DialogHeader>
           <div className="pt-6">
@@ -1239,12 +1333,98 @@ export default function TaskManager() {
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteProject}>
-              Delete
+            <Button variant="destructive" onClick={handleArchiveProject}>
+              Archive Project
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedTask && (
+        <div className="w-96 border-l overflow-auto">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Task Details</h2>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleEditTask(selectedTask)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedTask(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-medium">{selectedTask.title}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {selectedTask.task_id}
+                </p>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">Description</h4>
+                <p className="text-sm">{selectedTask.description}</p>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">Details</h4>
+                <ul className="text-sm space-y-1">
+                  <li>
+                    <span className="font-medium">Status:</span>{" "}
+                    {selectedTask.status}
+                  </li>
+                  <li>
+                    <span className="font-medium">Priority:</span>{" "}
+                    {selectedTask.priority}
+                  </li>
+                  <li>
+                    <span className="font-medium">Project:</span>{" "}
+                    {selectedTask.project}
+                  </li>
+                  <li>
+                    <span className="font-medium">Agent:</span>{" "}
+                    {selectedTask.agent}
+                  </li>
+                  <li>
+                    <span className="font-medium">Team:</span>{" "}
+                    {selectedTask.team}
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">Tags</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedTask.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="bg-blue-500/10 text-blue-500"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-8 pt-6 border-t">
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={() => handleDeleteTask(selectedTask)}
+              >
+                Delete Task
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </SidebarProvider>
   );
 }
