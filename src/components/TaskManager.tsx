@@ -44,6 +44,16 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Task } from "@/types/task";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 export default function TaskManager() {
   const router = useRouter();
@@ -54,6 +64,18 @@ export default function TaskManager() {
   const [isDarkMode, setIsDarkMode] = React.useState(false);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [isNewTaskModalOpen, setIsNewTaskModalOpen] = React.useState(false);
+  const [newTask, setNewTask] = React.useState({
+    title: "",
+    description: "",
+    status: "pending",
+    priority: "medium",
+    project: "",
+    agent: "",
+    team: "",
+    tags: [] as string[],
+  });
+  const [newTagInput, setNewTagInput] = React.useState("");
 
   React.useEffect(() => {
     fetchTasks();
@@ -117,6 +139,74 @@ export default function TaskManager() {
       return acc;
     }, {} as Record<string, typeof tasks>);
   }, [filteredTasks]);
+
+  async function handleCreateTask() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const task_id = `TASK-${Math.random()
+        .toString(36)
+        .substr(2, 9)
+        .toUpperCase()}`;
+
+      const { data, error } = await supabase.from("tasks").insert([
+        {
+          task_id,
+          user_id: session.user.id,
+          ...newTask,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) throw error;
+
+      // Refresh tasks list
+      fetchTasks();
+
+      // Reset form and close modal
+      setNewTask({
+        title: "",
+        description: "",
+        status: "pending",
+        priority: "medium",
+        project: "",
+        agent: "",
+        team: "",
+        tags: [],
+      });
+      setIsNewTaskModalOpen(false);
+    } catch (error) {
+      console.error("Error creating task:", error);
+    }
+  }
+
+  function handleAddTag(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && newTagInput.trim()) {
+      e.preventDefault();
+      if (!newTask.tags.includes(newTagInput.trim())) {
+        setNewTask((prev) => ({
+          ...prev,
+          tags: [...prev.tags, newTagInput.trim()],
+        }));
+      }
+      setNewTagInput("");
+    }
+  }
+
+  function handleRemoveTag(tagToRemove: string) {
+    setNewTask((prev) => ({
+      ...prev,
+      tags: prev.tags.filter((tag) => tag !== tagToRemove),
+    }));
+  }
 
   return (
     <SidebarProvider>
@@ -229,7 +319,7 @@ export default function TaskManager() {
                   <Moon className="h-4 w-4" />
                 )}
               </Button>
-              <Button>
+              <Button onClick={() => setIsNewTaskModalOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 New Task
               </Button>
@@ -450,6 +540,100 @@ export default function TaskManager() {
           </div>
         )}
       </div>
+      <Dialog open={isNewTaskModalOpen} onOpenChange={setIsNewTaskModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Create New Task</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={newTask.title}
+                onChange={(e) =>
+                  setNewTask((prev) => ({ ...prev, title: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={newTask.description}
+                onChange={(e) =>
+                  setNewTask((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Select
+                value={newTask.priority}
+                onValueChange={(value) =>
+                  setNewTask((prev) => ({ ...prev, priority: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="project">Project</Label>
+              <Input
+                id="project"
+                value={newTask.project}
+                onChange={(e) =>
+                  setNewTask((prev) => ({ ...prev, project: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="tags">Tags</Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {newTask.tags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="secondary"
+                    className="bg-blue-500/10 text-blue-500"
+                  >
+                    {tag}
+                    <X
+                      className="h-3 w-3 ml-1 cursor-pointer"
+                      onClick={() => handleRemoveTag(tag)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+              <Input
+                id="tags"
+                value={newTagInput}
+                onChange={(e) => setNewTagInput(e.target.value)}
+                onKeyDown={handleAddTag}
+                placeholder="Type and press Enter to add tags"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsNewTaskModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreateTask}>Create Task</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   );
 }
