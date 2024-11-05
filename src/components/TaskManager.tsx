@@ -18,6 +18,7 @@ import {
   Tags,
   Users,
   X,
+  Pencil,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,8 @@ export default function TaskManager() {
   const [newTagInput, setNewTagInput] = React.useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [taskToDelete, setTaskToDelete] = React.useState<Task | null>(null);
+  const [isEditTaskModalOpen, setIsEditTaskModalOpen] = React.useState(false);
+  const [editingTask, setEditingTask] = React.useState<Task | null>(null);
 
   React.useEffect(() => {
     fetchTasks();
@@ -245,6 +248,69 @@ export default function TaskManager() {
     } catch (error) {
       console.error("Error deleting task:", error);
     }
+  }
+
+  function handleEditTask(task: Task) {
+    setEditingTask({
+      ...task,
+      tags: [...task.tags],
+    });
+    setIsEditTaskModalOpen(true);
+  }
+
+  async function handleUpdateTask() {
+    if (!editingTask) return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.push("/auth");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          ...editingTask,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingTask.id)
+        .eq("user_id", session.user.id);
+
+      if (error) throw error;
+
+      // Refresh tasks list and update selected task
+      fetchTasks();
+      setSelectedTask(editingTask);
+      setIsEditTaskModalOpen(false);
+      setEditingTask(null);
+    } catch (error) {
+      console.error("Error updating task:", error);
+    }
+  }
+
+  function handleEditTagAdd(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && newTagInput.trim() && editingTask) {
+      e.preventDefault();
+      if (!editingTask.tags.includes(newTagInput.trim())) {
+        setEditingTask((prev) => ({
+          ...prev!,
+          tags: [...prev!.tags, newTagInput.trim()],
+        }));
+      }
+      setNewTagInput("");
+    }
+  }
+
+  function handleEditTagRemove(tagToRemove: string) {
+    if (!editingTask) return;
+    setEditingTask((prev) => ({
+      ...prev!,
+      tags: prev!.tags.filter((tag) => tag !== tagToRemove),
+    }));
   }
 
   return (
@@ -518,6 +584,13 @@ export default function TaskManager() {
                 <h2 className="text-xl font-semibold">Task Details</h2>
                 <div className="flex gap-2">
                   <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handleEditTask(selectedTask)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setSelectedTask(null)}
@@ -714,6 +787,130 @@ export default function TaskManager() {
             <Button variant="destructive" onClick={confirmDeleteTask}>
               Delete
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isEditTaskModalOpen} onOpenChange={setIsEditTaskModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-title">Title</Label>
+              <Input
+                id="edit-title"
+                value={editingTask?.title ?? ""}
+                onChange={(e) =>
+                  setEditingTask((prev) =>
+                    prev ? { ...prev, title: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                value={editingTask?.description ?? ""}
+                onChange={(e) =>
+                  setEditingTask((prev) =>
+                    prev ? { ...prev, description: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <Select
+                value={editingTask?.status}
+                onValueChange={(value) =>
+                  setEditingTask((prev) =>
+                    prev ? { ...prev, status: value as Task["status"] } : null
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="complete">Complete</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-priority">Priority</Label>
+              <Select
+                value={editingTask?.priority}
+                onValueChange={(value) =>
+                  setEditingTask((prev) =>
+                    prev
+                      ? { ...prev, priority: value as Task["priority"] }
+                      : null
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project">Project</Label>
+              <Input
+                id="edit-project"
+                value={editingTask?.project ?? ""}
+                onChange={(e) =>
+                  setEditingTask((prev) =>
+                    prev ? { ...prev, project: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-tags">Tags</Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {editingTask?.tags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="secondary"
+                    className="bg-blue-500/10 text-blue-500"
+                  >
+                    {tag}
+                    <X
+                      className="h-3 w-3 ml-1 cursor-pointer"
+                      onClick={() => handleEditTagRemove(tag)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+              <Input
+                id="edit-tags"
+                value={newTagInput}
+                onChange={(e) => setNewTagInput(e.target.value)}
+                onKeyDown={handleEditTagAdd}
+                placeholder="Type and press Enter to add tags"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditTaskModalOpen(false);
+                setEditingTask(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateTask}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
