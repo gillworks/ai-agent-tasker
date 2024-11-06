@@ -882,23 +882,23 @@ export default function TaskManager() {
             </SidebarGroup>
             <SidebarGroup>
               <SidebarGroupLabel className="text-xs font-medium text-muted-foreground">
-                Teams
+                Admin
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton className="w-full hover:bg-accent/50">
-                      NLP Team
+                      Audit Logs
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton className="w-full hover:bg-accent/50">
-                      Research Team
+                      Settings
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton className="w-full hover:bg-accent/50">
-                      Support Team
+                      User Management
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
