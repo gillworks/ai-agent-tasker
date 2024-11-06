@@ -815,6 +815,19 @@ export default function TaskManager() {
     return () => clearInterval(pollInterval);
   }, [tasks, selectedTask]);
 
+  function handleProjectNameChange(name: string) {
+    const key = name
+      .replace(/[^a-zA-Z]/g, "") // Remove non-letters
+      .toUpperCase()
+      .slice(0, 3); // Take first 3 letters
+
+    setNewProject((prev) => ({
+      ...prev,
+      name,
+      key,
+    }));
+  }
+
   return (
     <SidebarProvider>
       <div className="flex h-screen bg-background">
@@ -1599,18 +1612,9 @@ export default function TaskManager() {
               <Label htmlFor="project-name">Project Name</Label>
               <Input
                 id="project-name"
+                placeholder="Project name"
                 value={newProject.name}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  // Auto-generate key from first 3 characters of name, uppercase
-                  const autoKey = name.slice(0, 3).toUpperCase();
-                  setNewProject((prev) => ({
-                    ...prev,
-                    name,
-                    // Only auto-update key if it hasn't been manually modified
-                    key: prev.key === "" ? autoKey : prev.key,
-                  }));
-                }}
+                onChange={(e) => handleProjectNameChange(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
