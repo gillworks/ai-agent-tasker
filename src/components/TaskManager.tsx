@@ -27,6 +27,8 @@ import {
   Trash2,
   ExternalLink,
   Link,
+  Play,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,6 +68,54 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Project } from "@/types/project";
 import { Agent } from "@/types/agent";
+
+const API_BASE_URL = "http://localhost:8000";
+
+function mapApiStatusToTaskStatus(apiStatus: string): Task["status"] {
+  switch (apiStatus) {
+    case "pending":
+      return "pending";
+    case "running":
+      return "running";
+    case "completed":
+      return "complete";
+    case "failed":
+      return "failed";
+    default:
+      return "draft";
+  }
+}
+
+async function createApiTask(task: Task, projectGithubUrl: string) {
+  const urlParts = projectGithubUrl.split("/");
+  const repoName = urlParts[urlParts.length - 1];
+  const repoUrl = projectGithubUrl;
+
+  const response = await fetch(`${API_BASE_URL}/api/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      task_description: `${task.task_id} ${task.title}`,
+      detailed_description: task.description,
+      repo_url: repoUrl,
+      repo_name: repoName,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function pollTaskStatus(taskId: string) {
+  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`);
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+  return response.json();
+}
 
 export default function TaskManager() {
   const router = useRouter();
@@ -674,6 +724,97 @@ export default function TaskManager() {
     return agent ? agent.name : "Unassigned";
   };
 
+  async function handleRunTask(task: Task) {
+    try {
+      const project = projects.find((p) => p.id === task.project_id);
+      if (!project?.github_url) return;
+
+      const apiResponse = await createApiTask(task, project.github_url);
+
+      // Update task in database with API task ID and status
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          api_task_id: apiResponse.task_id,
+          status: "pending", // Start with pending status
+          feature_branch: apiResponse.branch_name || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", task.id);
+
+      if (error) throw error;
+
+      // Refresh tasks to trigger polling
+      await fetchTasks();
+
+      // Update selected task if it's the one being run
+      if (selectedTask?.id === task.id) {
+        setSelectedTask((prev) =>
+          prev
+            ? { ...prev, status: "pending", api_task_id: apiResponse.task_id }
+            : null
+        );
+      }
+    } catch (error) {
+      console.error("Error running task:", error);
+    }
+  }
+
+  React.useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      const tasksToCheck = tasks.filter(
+        (t) =>
+          t.api_task_id && (t.status === "pending" || t.status === "running")
+      );
+
+      console.log("Polling tasks:", tasksToCheck.length);
+
+      for (const task of tasksToCheck) {
+        try {
+          console.log("Polling task:", task.api_task_id);
+          const status = await pollTaskStatus(task.api_task_id!);
+          const newStatus = mapApiStatusToTaskStatus(status.status);
+
+          console.log(
+            "Received status:",
+            status.status,
+            "Mapped to:",
+            newStatus
+          );
+
+          if (
+            newStatus !== task.status ||
+            status.branch_name !== task.feature_branch
+          ) {
+            const { data, error } = await supabase
+              .from("tasks")
+              .update({
+                status: newStatus,
+                feature_branch: status.branch_name || task.feature_branch,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", task.id)
+              .select();
+
+            if (error) throw error;
+
+            // Refresh tasks list
+            fetchTasks();
+
+            // Update selected task with the latest data if it's being viewed
+            if (selectedTask?.id === task.id && data?.[0]) {
+              setSelectedTask(data[0]);
+            }
+          }
+        } catch (error) {
+          console.error(`Error polling task ${task.id}:`, error);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [tasks, selectedTask]);
+
   return (
     <SidebarProvider>
       <div className="flex h-screen bg-background">
@@ -840,7 +981,7 @@ export default function TaskManager() {
                         <SelectItem value="all">All Status</SelectItem>
                         <SelectItem value="draft">Draft</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="in-progress">In Progress</SelectItem>
+                        <SelectItem value="running">Running</SelectItem>
                         <SelectItem value="complete">Complete</SelectItem>
                       </SelectContent>
                     </Select>
@@ -857,7 +998,7 @@ export default function TaskManager() {
                           <div className="flex items-center gap-4">
                             <Clock
                               className={`h-4 w-4 ${
-                                task.status === "in-progress"
+                                task.status === "running"
                                   ? "text-yellow-500"
                                   : task.status === "complete"
                                   ? "text-green-500"
@@ -890,11 +1031,13 @@ export default function TaskManager() {
                               ${
                                 task.status === "complete"
                                   ? "border-green-500 text-green-500"
-                                  : task.status === "in-progress"
+                                  : task.status === "running"
                                   ? "border-yellow-500 text-yellow-500"
                                   : task.status === "draft"
                                   ? "border-purple-500 text-purple-500"
-                                  : "border-gray-500 text-gray-500"
+                                  : task.status === "pending"
+                                  ? "border-blue-500 text-blue-500"
+                                  : "border-red-500 text-red-500"
                               }
                             `}
                           >
@@ -932,11 +1075,13 @@ export default function TaskManager() {
                                           ${
                                             task.status === "complete"
                                               ? "border-green-500 text-green-500"
-                                              : task.status === "in-progress"
+                                              : task.status === "running"
                                               ? "border-yellow-500 text-yellow-500"
                                               : task.status === "draft"
                                               ? "border-purple-500 text-purple-500"
-                                              : "border-gray-500 text-gray-500"
+                                              : task.status === "pending"
+                                              ? "border-blue-500 text-blue-500"
+                                              : "border-red-500 text-red-500"
                                           }
                                         `}
                                       >
@@ -1320,7 +1465,7 @@ export default function TaskManager() {
                 <SelectContent>
                   <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="running">Running</SelectItem>
                   <SelectItem value="complete">Complete</SelectItem>
                 </SelectContent>
               </Select>
@@ -1810,11 +1955,13 @@ export default function TaskManager() {
                       ${
                         selectedTask.status === "complete"
                           ? "border-green-500 text-green-500"
-                          : selectedTask.status === "in-progress"
+                          : selectedTask.status === "running"
                           ? "border-yellow-500 text-yellow-500"
                           : selectedTask.status === "draft"
                           ? "border-purple-500 text-purple-500"
-                          : "border-gray-500 text-gray-500"
+                          : selectedTask.status === "pending"
+                          ? "border-blue-500 text-blue-500"
+                          : "border-red-500 text-red-500"
                       }
                     `}
                   >
@@ -1931,7 +2078,25 @@ export default function TaskManager() {
                 </div>
               </div>
             </div>
-            <div className="mt-8 pt-6 border-t">
+            <div className="mt-8 pt-6 border-t space-y-4">
+              {["pending", "running"].includes(selectedTask.status) ? (
+                <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-md bg-muted">
+                  <span className="capitalize">{selectedTask.status}</span>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : (
+                <Button
+                  className="w-full"
+                  onClick={() => handleRunTask(selectedTask)}
+                  disabled={
+                    !projects.find((p) => p.id === selectedTask.project_id)
+                      ?.github_url || selectedTask.status === "complete"
+                  }
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Run Task
+                </Button>
+              )}
               <Button
                 variant="destructive"
                 className="w-full"

@@ -4,7 +4,7 @@ export type Task = {
   user_id: string;
   title: string;
   description: string;
-  status: "draft" | "pending" | "in-progress" | "complete";
+  status: "draft" | "pending" | "running" | "complete" | "failed";
   priority: "low" | "medium" | "high";
   project_id: string;
   project: string;
@@ -14,4 +14,5 @@ export type Task = {
   tags: string[];
   created_at: string;
   updated_at: string;
+  api_task_id: string | null;
 };
