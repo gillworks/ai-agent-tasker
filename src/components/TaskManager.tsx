@@ -163,6 +163,7 @@ export default function TaskManager() {
     name: "",
     key: "",
     github_url: "",
+    description: "",
   });
   const [agents, setAgents] = React.useState<Agent[]>([]);
   const [isNewAgentModalOpen, setIsNewAgentModalOpen] = React.useState(false);
@@ -551,6 +552,7 @@ export default function TaskManager() {
           user_id: session.user.id,
           name: newProject.name,
           key: newProject.key.toUpperCase(),
+          description: newProject.description || null,
           github_url: newProject.github_url || null,
           archived: false,
           created_at: new Date().toISOString(),
@@ -561,7 +563,7 @@ export default function TaskManager() {
       if (error) throw error;
 
       fetchProjects();
-      setNewProject({ name: "", key: "", github_url: "" });
+      setNewProject({ name: "", key: "", github_url: "", description: "" });
       setIsNewProjectModalOpen(false);
     } catch (error) {
       console.error("Error creating project:", error);
@@ -576,6 +578,7 @@ export default function TaskManager() {
         .from("projects")
         .update({
           name: editingProject.name,
+          description: editingProject.description,
           github_url: editingProject.github_url,
           updated_at: new Date().toISOString(),
         })
@@ -1157,6 +1160,11 @@ export default function TaskManager() {
                           <p className="text-sm text-muted-foreground">
                             Key: {project.key}
                           </p>
+                          {project.description && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {project.description}
+                            </p>
+                          )}
                           {project.github_url && (
                             <a
                               href={project.github_url}
@@ -1632,6 +1640,22 @@ export default function TaskManager() {
               />
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="project-description">
+                Description (Optional)
+              </Label>
+              <Textarea
+                id="project-description"
+                value={newProject.description}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder="Project description"
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="project-github">GitHub Repo URL (Optional)</Label>
               <Input
                 id="project-github"
@@ -1691,6 +1715,19 @@ export default function TaskManager() {
                 value={editingProject?.key ?? ""}
                 disabled
                 className="bg-muted"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-description">Description</Label>
+              <Textarea
+                id="edit-project-description"
+                value={editingProject?.description ?? ""}
+                onChange={(e) =>
+                  setEditingProject((prev) =>
+                    prev ? { ...prev, description: e.target.value } : null
+                  )
+                }
+                placeholder="Project description"
               />
             </div>
             <div className="grid gap-2">
