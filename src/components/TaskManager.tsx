@@ -177,6 +177,9 @@ export default function TaskManager() {
     url: "",
     description: "",
   });
+  const [selectedProject, setSelectedProject] = React.useState<Project | null>(
+    null
+  );
 
   React.useEffect(() => {
     fetchTasks();
@@ -207,6 +210,18 @@ export default function TaskManager() {
       fetchAgents();
     }
   }, [isNewTaskModalOpen, isEditTaskModalOpen]);
+
+  React.useEffect(() => {
+    if (selectedSection === "projects") {
+      setSelectedTask(null);
+    }
+  }, [selectedSection]);
+
+  React.useEffect(() => {
+    if (selectedSection === "tasks") {
+      setSelectedProject(null);
+    }
+  }, [selectedSection]);
 
   async function fetchTasks() {
     try {
@@ -1153,7 +1168,8 @@ export default function TaskManager() {
                     {projects.map((project) => (
                       <div
                         key={project.id}
-                        className="flex items-center justify-between rounded-lg border bg-card p-4"
+                        className="flex items-center justify-between rounded-lg border bg-card p-4 cursor-pointer hover:bg-accent/50"
+                        onClick={() => setSelectedProject(project)}
                       >
                         <div>
                           <h3 className="font-medium">{project.name}</h3>
@@ -2146,6 +2162,84 @@ export default function TaskManager() {
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Task
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedProject && (
+        <div className="w-96 border-l overflow-auto">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold">Project Details</h2>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    setEditingProject(selectedProject);
+                    setIsEditProjectModalOpen(true);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedProject(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="bg-accent/50 rounded-lg p-4">
+                <h3 className="font-medium text-lg">{selectedProject.name}</h3>
+                <Badge variant="outline" className="mt-2">
+                  {selectedProject.key}
+                </Badge>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <AlignLeft className="h-4 w-4 text-muted-foreground" />
+                  Description
+                </h4>
+                <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                  {selectedProject.description || "No description provided"}
+                </div>
+              </div>
+
+              {selectedProject.github_url && (
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <Link className="h-4 w-4 text-muted-foreground" />
+                    Repository
+                  </h4>
+                  <a
+                    href={selectedProject.github_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-blue-500 hover:text-blue-600"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    View on GitHub
+                  </a>
+                </div>
+              )}
+
+              <div className="mt-8 pt-6 border-t">
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => {
+                    setProjectToDelete(selectedProject);
+                    setIsDeleteProjectDialogOpen(true);
+                  }}
+                >
+                  <Archive className="h-4 w-4 mr-2" />
+                  Archive Project
+                </Button>
+              </div>
             </div>
           </div>
         </div>
