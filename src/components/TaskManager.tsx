@@ -164,6 +164,7 @@ export default function TaskManager() {
     key: "",
     github_url: "",
     description: "",
+    key_files: "",
   });
   const [agents, setAgents] = React.useState<Agent[]>([]);
   const [isNewAgentModalOpen, setIsNewAgentModalOpen] = React.useState(false);
@@ -569,6 +570,7 @@ export default function TaskManager() {
           key: newProject.key.toUpperCase(),
           description: newProject.description || null,
           github_url: newProject.github_url || null,
+          key_files: newProject.key_files || null,
           archived: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -578,7 +580,13 @@ export default function TaskManager() {
       if (error) throw error;
 
       fetchProjects();
-      setNewProject({ name: "", key: "", github_url: "", description: "" });
+      setNewProject({
+        name: "",
+        key: "",
+        github_url: "",
+        description: "",
+        key_files: "",
+      });
       setIsNewProjectModalOpen(false);
     } catch (error) {
       console.error("Error creating project:", error);
@@ -589,21 +597,26 @@ export default function TaskManager() {
     if (!editingProject) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("projects")
         .update({
           name: editingProject.name,
           description: editingProject.description,
           github_url: editingProject.github_url,
+          key_files: editingProject.key_files,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", editingProject.id);
+        .eq("id", editingProject.id)
+        .select();
 
       if (error) throw error;
 
       fetchProjects();
       setIsEditProjectModalOpen(false);
       setEditingProject(null);
+      if (selectedProject?.id === editingProject.id && data?.[0]) {
+        setSelectedProject(data[0]);
+      }
     } catch (error) {
       console.error("Error updating project:", error);
     }
@@ -1685,6 +1698,20 @@ export default function TaskManager() {
                 placeholder="https://github.com/username/repo"
               />
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="project-key-files">Key Files (Optional)</Label>
+              <Textarea
+                id="project-key-files"
+                value={newProject.key_files}
+                onChange={(e) =>
+                  setNewProject((prev) => ({
+                    ...prev,
+                    key_files: e.target.value,
+                  }))
+                }
+                placeholder="List important files and directories"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -1757,6 +1784,19 @@ export default function TaskManager() {
                   )
                 }
                 placeholder="https://github.com/username/repo"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-key-files">Key Files</Label>
+              <Textarea
+                id="edit-project-key-files"
+                value={editingProject?.key_files ?? ""}
+                onChange={(e) =>
+                  setEditingProject((prev) =>
+                    prev ? { ...prev, key_files: e.target.value } : null
+                  )
+                }
+                placeholder="List important files and directories"
               />
             </div>
           </div>
@@ -2226,6 +2266,16 @@ export default function TaskManager() {
                   </a>
                 </div>
               )}
+
+              <div>
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <Folder className="h-4 w-4 text-muted-foreground" />
+                  Key Files
+                </h4>
+                <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                  {selectedProject.key_files || "No key files listed"}
+                </div>
+              </div>
 
               <div className="mt-8 pt-6 border-t">
                 <Button

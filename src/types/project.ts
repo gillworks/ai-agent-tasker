@@ -5,6 +5,7 @@ export type Project = {
   key: string;
   description: string | null;
   github_url: string | null;
+  key_files: string | null;
   archived: boolean;
   created_at: string;
   updated_at: string;
