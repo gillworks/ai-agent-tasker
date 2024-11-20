@@ -117,6 +117,47 @@ async function pollTaskStatus(taskId: string) {
   return response.json();
 }
 
+async function createProjectTask(description: string, keyFiles: string[]) {
+  const response = await fetch(`${API_BASE_URL}/api/project-tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_description: description,
+      key_files: keyFiles,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function pollProjectStatus(projectId: string) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/project-tasks/${projectId}`
+  );
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+type ProjectSubtask = {
+  task_id: string;
+  status: string;
+  task_description: string;
+  branch_name: string;
+};
+
+type ProjectTaskStatus = {
+  project_id: string;
+  created_at: string;
+  updated_at: string;
+  subtasks: ProjectSubtask[];
+};
+
 export default function TaskManager() {
   const router = useRouter();
   const [tasks, setTasks] = React.useState<Task[]>([]);
@@ -181,6 +222,9 @@ export default function TaskManager() {
   const [selectedProject, setSelectedProject] = React.useState<Project | null>(
     null
   );
+  const [projectTaskStatus, setProjectTaskStatus] =
+    React.useState<ProjectTaskStatus | null>(null);
+  const [isProjectRunning, setIsProjectRunning] = React.useState(false);
 
   React.useEffect(() => {
     fetchTasks();
@@ -859,6 +903,91 @@ export default function TaskManager() {
     }));
   }
 
+  async function handleRunProject(project: Project) {
+    try {
+      setIsProjectRunning(true);
+
+      // Parse key files from the text area, handling both newlines and commas
+      const keyFiles = project.key_files
+        ? project.key_files
+            .split(/[\n,]/) // Split on newlines or commas
+            .map((file) => file.trim()) // Trim whitespace
+            .filter(Boolean) // Remove empty strings
+        : [];
+
+      if (!keyFiles.length) {
+        throw new Error("No key files specified");
+      }
+
+      // Log the request payload for debugging
+      console.log("Creating project task with:", {
+        project_description: project.description || project.name,
+        key_files: keyFiles,
+      });
+
+      const apiResponse = await createProjectTask(
+        project.description || project.name,
+        keyFiles
+      );
+
+      // Log the API response for debugging
+      console.log("API Response:", apiResponse);
+
+      setProjectTaskStatus({
+        project_id: apiResponse.project_id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        subtasks: apiResponse.subtask_ids.map((id: string) => ({
+          task_id: id,
+          status: "pending",
+          task_description: "Initializing...",
+          branch_name: "",
+        })),
+      });
+    } catch (error) {
+      // More detailed error logging
+      console.error("Error running project:", {
+        error,
+        message: error instanceof Error ? error.message : "Unknown error",
+        project: {
+          name: project.name,
+          description: project.description,
+          keyFiles: project.key_files,
+        },
+      });
+      setIsProjectRunning(false);
+      // Optionally show an error message to the user
+      alert(
+        "Failed to start project task. Please check the console for details."
+      );
+    }
+  }
+
+  React.useEffect(() => {
+    if (!projectTaskStatus?.project_id || !isProjectRunning) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const status = await pollProjectStatus(projectTaskStatus.project_id);
+        setProjectTaskStatus(status);
+
+        // Check if all subtasks are complete
+        const allComplete = status.subtasks.every(
+          (task: ProjectSubtask) =>
+            task.status === "completed" || task.status === "failed"
+        );
+        if (allComplete) {
+          setIsProjectRunning(false);
+        }
+      } catch (error) {
+        console.error("Error polling project status:", error);
+        setIsProjectRunning(false);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [projectTaskStatus?.project_id, isProjectRunning]);
+
   return (
     <SidebarProvider>
       <div className="flex h-screen bg-background">
@@ -1176,7 +1305,7 @@ export default function TaskManager() {
               </header>
 
               <div className="flex-grow overflow-auto">
-                <div className="p-6">
+                <div className="p-6" style={{ maxWidth: "800px" }}>
                   <div className="space-y-4">
                     {projects.map((project) => (
                       <div
@@ -1184,14 +1313,16 @@ export default function TaskManager() {
                         className="flex items-center justify-between rounded-lg border bg-card p-4 cursor-pointer hover:bg-accent/50"
                         onClick={() => setSelectedProject(project)}
                       >
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-medium">{project.name}</h3>
                           <p className="text-sm text-muted-foreground">
                             Key: {project.key}
                           </p>
                           {project.description && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {project.description}
+                            <p className="text-sm text-muted-foreground mt-1 truncate">
+                              {project.description.length > 300
+                                ? `${project.description.slice(0, 300)}...`
+                                : project.description}
                             </p>
                           )}
                           {project.github_url && (
@@ -1200,17 +1331,19 @@ export default function TaskManager() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1 mt-1"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               <ExternalLink className="h-3 w-3" />
                               GitHub Repo
                             </a>
                           )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 ml-4">
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setEditingProject(project);
                               setIsEditProjectModalOpen(true);
                             }}
@@ -1220,7 +1353,8 @@ export default function TaskManager() {
                           <Button
                             variant="destructive"
                             size="icon"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setProjectToDelete(project);
                               setIsDeleteProjectDialogOpen(true);
                             }}
@@ -2207,7 +2341,7 @@ export default function TaskManager() {
         </div>
       )}
       {selectedProject && (
-        <div className="w-96 border-l overflow-auto">
+        <div className="w-[600px] border-l overflow-auto">
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold">Project Details</h2>
@@ -2244,7 +2378,7 @@ export default function TaskManager() {
                   <AlignLeft className="h-4 w-4 text-muted-foreground" />
                   Description
                 </h4>
-                <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <div className="bg-muted/50 rounded-lg p-3 text-sm whitespace-pre-wrap">
                   {selectedProject.description || "No description provided"}
                 </div>
               </div>
@@ -2272,12 +2406,60 @@ export default function TaskManager() {
                   <Folder className="h-4 w-4 text-muted-foreground" />
                   Key Files
                 </h4>
-                <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <div className="bg-muted/50 rounded-lg p-3 text-sm whitespace-pre-wrap">
                   {selectedProject.key_files || "No key files listed"}
                 </div>
               </div>
 
-              <div className="mt-8 pt-6 border-t">
+              <div className="mt-8 pt-6 border-t space-y-4">
+                {isProjectRunning ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-md bg-muted">
+                      <span>Project Running</span>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                    {projectTaskStatus?.subtasks.map((subtask) => (
+                      <div
+                        key={subtask.task_id}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">
+                            {subtask.task_description}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {subtask.task_id}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={
+                            subtask.status === "completed"
+                              ? "border-green-500 text-green-500"
+                              : subtask.status === "failed"
+                              ? "border-red-500 text-red-500"
+                              : subtask.status === "running"
+                              ? "border-yellow-500 text-yellow-500"
+                              : "border-blue-500 text-blue-500"
+                          }
+                        >
+                          {subtask.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Button
+                    className="w-full"
+                    onClick={() => handleRunProject(selectedProject)}
+                    disabled={
+                      !selectedProject.key_files || !selectedProject.github_url
+                    }
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Run Project
+                  </Button>
+                )}
                 <Button
                   variant="destructive"
                   className="w-full"
